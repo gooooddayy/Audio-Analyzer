@@ -1,0 +1,1066 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>音频质量分析器</title>
+  <style>
+    :root {
+      --bg: #0b0c0f;
+      --panel: #15171c;
+      --panel-2: #1c1f26;
+      --border: #2a2d36;
+      --text: #e8e9ec;
+      --text-2: #9ba1ad;
+      --text-3: #6b7280;
+      --accent: #22c55e;
+      --accent-2: #10b981;
+      --warn: #f59e0b;
+      --fail: #ef4444;
+      --info: #3b82f6;
+      --pass: #22c55e;
+      --caution: #f59e0b;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+    .container { max-width: 1200px; margin: 0 auto; padding: 32px 20px; }
+    header { text-align: center; margin-bottom: 28px; }
+    header h1 { font-size: 32px; font-weight: 700; margin: 0 0 8px; letter-spacing: -0.5px; }
+    header h1 span { color: var(--accent); }
+    header p { color: var(--text-2); margin: 0; font-size: 15px; }
+    .dropzone {
+      border: 2px dashed var(--border);
+      border-radius: 16px;
+      background: var(--panel);
+      padding: 56px 24px;
+      text-align: center;
+      transition: all .2s ease;
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+    }
+    .dropzone:hover, .dropzone.dragover { border-color: var(--accent); background: #181c21; }
+    .dropzone .icon {
+      width: 64px; height: 64px; margin: 0 auto 18px;
+      border-radius: 50%; background: rgba(34,197,94,.12);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .dropzone .icon svg { width: 28px; height: 28px; stroke: var(--accent); }
+    .dropzone h3 { margin: 0 0 8px; font-size: 18px; font-weight: 600; }
+    .dropzone p { margin: 0; color: var(--text-2); font-size: 13px; }
+    .formats {
+      display: flex; flex-wrap: wrap; justify-content: center; gap: 8px;
+      margin-top: 16px;
+    }
+    .formats span {
+      background: var(--panel-2); color: var(--text-2); font-size: 11px;
+      padding: 4px 10px; border-radius: 20px; border: 1px solid var(--border);
+    }
+    input[type="file"] { display: none; }
+    .progress {
+      display: none; margin-top: 20px; background: var(--panel-2);
+      border-radius: 8px; height: 10px; overflow: hidden;
+    }
+    .progress-bar { height: 100%; width: 0%; background: var(--accent); transition: width .2s; }
+    .progress-text { color: var(--text-2); font-size: 12px; margin-top: 8px; }
+
+    .results { display: none; margin-top: 28px; }
+    .grid {
+      display: grid; grid-template-columns: repeat(12, 1fr); gap: 16px;
+    }
+    .card {
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: 14px; padding: 20px;
+    }
+    .card h4 {
+      margin: 0 0 14px; font-size: 13px; font-weight: 600;
+      color: var(--text-2); text-transform: uppercase; letter-spacing: .5px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .card h4 .dot {
+      width: 8px; height: 8px; border-radius: 50%; background: var(--accent);
+    }
+    .span-4 { grid-column: span 4; }
+    .span-6 { grid-column: span 6; }
+    .span-8 { grid-column: span 8; }
+    .span-12 { grid-column: span 12; }
+    @media (max-width: 900px) {
+      .span-4, .span-6, .span-8 { grid-column: span 12; }
+    }
+
+    .rating-big {
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .rating-big .label { color: var(--text-2); font-size: 13px; margin-bottom: 6px; }
+    .rating-big .value { font-size: 28px; font-weight: 700; }
+    .rating-big .desc { color: var(--text-2); font-size: 13px; margin-top: 6px; max-width: 320px; }
+    .badge {
+      display: inline-block; padding: 6px 14px; border-radius: 20px;
+      font-size: 12px; font-weight: 600;
+    }
+    .badge-pass { background: rgba(34,197,94,.15); color: var(--pass); }
+    .badge-caution { background: rgba(245,158,11,.15); color: var(--caution); }
+    .badge-warn { background: rgba(239,68,68,.15); color: var(--fail); }
+    .badge-info { background: rgba(59,130,246,.15); color: var(--info); }
+
+    .meta-row {
+      display: flex; justify-content: space-between; padding: 10px 0;
+      border-bottom: 1px solid var(--border); font-size: 14px;
+      gap: 12px;
+    }
+    .meta-row:last-child { border-bottom: none; }
+    .meta-row .k { color: var(--text-2); flex-shrink: 0; }
+    .meta-row .v { font-weight: 500; text-align: right; word-break: break-all; }
+    .meta-row .v.small { color: var(--text-2); font-size: 12px; }
+    .meta-row .v.green { color: var(--accent); font-weight: 600; }
+
+    .stat-row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 14px; }
+    .stat-row .k { color: var(--text-2); }
+    .stat-row .v { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+    .stat-row .v.good { color: var(--pass); }
+    .stat-row .v.warn { color: var(--warn); }
+    .stat-row .v.fail { color: var(--fail); }
+
+    canvas { width: 100%; height: 220px; display: block; border-radius: 10px; background: #0d0e12; }
+    canvas.spectrogram { height: 260px; }
+
+    .q-item {
+      display: flex; align-items: flex-start; gap: 12px; padding: 12px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .q-item:last-child { border-bottom: none; }
+    .q-icon {
+      width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center; font-size: 13px;
+    }
+    .q-icon.pass { background: rgba(34,197,94,.15); color: var(--pass); }
+    .q-icon.caution { background: rgba(245,158,11,.15); color: var(--caution); }
+    .q-icon.warn { background: rgba(239,68,68,.15); color: var(--fail); }
+    .q-icon.info { background: rgba(59,130,246,.15); color: var(--info); }
+    .q-title { font-weight: 600; font-size: 14px; margin-bottom: 2px; }
+    .q-desc { color: var(--text-2); font-size: 12px; }
+
+    .bar-bg { background: var(--panel-2); border-radius: 6px; height: 8px; margin-top: 10px; overflow: hidden; }
+    .bar-fill { height: 100%; border-radius: 6px; }
+
+    .loading-overlay {
+      position: fixed; inset: 0; background: rgba(11,12,15,.85);
+      display: none; align-items: center; justify-content: center; z-index: 100;
+      backdrop-filter: blur(4px);
+    }
+    .loading-box { text-align: center; }
+    .spinner {
+      width: 44px; height: 44px; border: 3px solid var(--border);
+      border-top-color: var(--accent); border-radius: 50%;
+      animation: spin 1s linear infinite; margin: 0 auto 16px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .footer { text-align: center; color: var(--text-3); font-size: 12px; margin-top: 32px; }
+
+    .spectrum-legend {
+      display: flex; justify-content: center; gap: 20px; margin-top: 10px; font-size: 12px; color: var(--text-2);
+    }
+    .spectrum-legend span { display: flex; align-items: center; gap: 6px; }
+    .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .err { color: var(--fail); font-size: 13px; margin-top: 12px; text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="loading-overlay" id="loadingOverlay">
+    <div class="loading-box">
+      <div class="spinner"></div>
+      <div id="loadingText">正在分析...</div>
+    </div>
+  </div>
+
+  <div class="container">
+    <header>
+      <h1><span>音频</span>质量分析器</h1>
+      <p>在数秒内分析任意音频文件 — 完全免费 · 纯本地处理 · 无需联网</p>
+    </header>
+
+    <div class="dropzone" id="dropzone">
+      <div class="icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      </div>
+      <h3>将音频文件拖放到此处</h3>
+      <p>或点击选择文件，分析全程在本地浏览器完成</p>
+      <div class="formats">
+        <span>FLAC</span><span>WAV</span><span>AIFF</span><span>ALAC</span>
+        <span>MP3</span><span>AAC</span><span>OGG</span><span>M4A</span><span>OPUS</span>
+      </div>
+      <div class="progress" id="progress">
+        <div class="progress-bar" id="progressBar"></div>
+      </div>
+      <div class="progress-text" id="progressText"></div>
+      <div class="err" id="errText"></div>
+    </div>
+    <input type="file" id="fileInput" accept="audio/*,.flac,.wav,.aiff,.aif,.alac,.mp3,.aac,.ogg,.m4a,.opus">
+
+    <div class="results" id="results">
+      <div class="grid">
+        <div class="card span-8">
+          <div class="rating-big">
+            <div>
+              <div class="label">质量评级</div>
+              <div class="value" id="ratingValue">-</div>
+              <div class="desc" id="ratingDesc">-</div>
+            </div>
+            <div class="badge" id="ratingBadge">-</div>
+          </div>
+        </div>
+        <div class="card span-4">
+          <h4><span class="dot"></span>检测摘要</h4>
+          <div class="stat-row"><span class="k">格式</span><span class="v" id="summaryFormat">-</span></div>
+          <div class="stat-row"><span class="k">编码类型</span><span class="v" id="summaryCodecType">-</span></div>
+          <div class="stat-row"><span class="k">总体得分</span><span class="v" id="summaryScore">-</span></div>
+        </div>
+
+        <div class="card span-4">
+          <h4><span class="dot"></span>文件信息</h4>
+          <div class="meta-row"><span class="k">文件名</span><span class="v" id="metaName">-</span></div>
+          <div class="meta-row"><span class="k">大小</span><span class="v" id="metaSize">-</span></div>
+          <div class="meta-row"><span class="k">时长</span><span class="v" id="metaDuration">-</span></div>
+          <div class="meta-row"><span class="k">SHA1</span><span class="v small" id="metaHash">-</span></div>
+        </div>
+
+        <div class="card span-4">
+          <h4><span class="dot"></span>格式检测</h4>
+          <div class="meta-row"><span class="k">容器</span><span class="v" id="fmtContainer">-</span></div>
+          <div class="meta-row"><span class="k">编码器</span><span class="v" id="fmtCodec">-</span></div>
+          <div class="meta-row"><span class="k">Sample Rate</span><span class="v green" id="fmtSampleRate">-</span></div>
+          <div class="meta-row"><span class="k">位深度</span><span class="v green" id="fmtBitDepth">-</span></div>
+          <div class="meta-row"><span class="k">码率</span><span class="v" id="fmtBitrate">-</span></div>
+          <div class="meta-row"><span class="k">声道</span><span class="v" id="fmtChannels">-</span></div>
+          <div class="meta-row"><span class="k">总采样数</span><span class="v" id="fmtSamples">-</span></div>
+        </div>
+
+        <div class="card span-4">
+          <h4><span class="dot"></span>质量评估</h4>
+          <div id="qualityList"></div>
+        </div>
+
+        <div class="card span-12">
+          <h4><span class="dot"></span>频谱图</h4>
+          <canvas class="spectrogram" id="spectrogramCanvas"></canvas>
+          <div class="spectrum-legend">
+            <span><span class="legend-dot" style="background:#3b82f6"></span>低频</span>
+            <span><span class="legend-dot" style="background:#22c55e"></span>中频</span>
+            <span><span class="legend-dot" style="background:#f59e0b"></span>高频</span>
+          </div>
+        </div>
+
+        <div class="card span-6">
+          <h4><span class="dot"></span>频率频谱分析</h4>
+          <canvas id="spectrumCanvas"></canvas>
+          <div class="spectrum-legend">
+            <span><span class="legend-dot" style="background:#22c55e"></span>左/单声道</span>
+            <span><span class="legend-dot" style="background:#3b82f6"></span>右声道</span>
+          </div>
+        </div>
+
+        <div class="card span-6">
+          <h4><span class="dot"></span>频率截止与过采样</h4>
+          <div class="stat-row"><span class="k">检测到的截止频率</span><span class="v" id="cutoffFreq">-</span></div>
+          <div class="stat-row"><span class="k">Nyquist 频率</span><span class="v" id="nyquistFreq">-</span></div>
+          <div class="stat-row"><span class="k">高频能量占比</span><span class="v" id="highFreqEnergy">-</span></div>
+          <div class="stat-row"><span class="k">过采样判定</span><span class="v" id="upsampleResult">-</span></div>
+          <div class="bar-bg"><div class="bar-fill" id="cutoffBar" style="width:0%;background:var(--accent)"></div></div>
+        </div>
+
+        <div class="card span-6">
+          <h4><span class="dot"></span>动态范围与响度</h4>
+          <div class="stat-row"><span class="k">峰值电平</span><span class="v" id="peakLevel">-</span></div>
+          <div class="stat-row"><span class="k">RMS 电平</span><span class="v" id="rmsLevel">-</span></div>
+          <div class="stat-row"><span class="k">Crest Factor</span><span class="v" id="crestFactor">-</span></div>
+          <div class="stat-row"><span class="k">动态范围 (DR)</span><span class="v" id="drValue">-</span></div>
+          <div class="stat-row"><span class="k">响度 (RMS)</span><span class="v" id="loudness">-</span></div>
+          <div class="bar-bg"><div class="bar-fill" id="dynamicBar" style="width:0%;background:var(--accent)"></div></div>
+        </div>
+
+        <div class="card span-6">
+          <h4><span class="dot"></span>立体声与削波</h4>
+          <div class="stat-row"><span class="k">立体声相关性</span><span class="v" id="correlation">-</span></div>
+          <div class="stat-row"><span class="k">中置/侧向能量比</span><span class="v" id="msRatio">-</span></div>
+          <div class="stat-row"><span class="k">削波采样数</span><span class="v" id="clipCount">-</span></div>
+          <div class="stat-row"><span class="k">削波占比</span><span class="v" id="clipPercent">-</span></div>
+          <div class="stat-row"><span class="k">相位问题</span><span class="v" id="phaseIssue">-</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">Audio Quality Analyzer · 基于 Web Audio API 与文件头解析 · 全程本地浏览器完成，无需联网</div>
+  </div>
+
+  <script>
+    const els = {
+      dropzone: document.getElementById('dropzone'),
+      fileInput: document.getElementById('fileInput'),
+      results: document.getElementById('results'),
+      progress: document.getElementById('progress'),
+      progressBar: document.getElementById('progressBar'),
+      progressText: document.getElementById('progressText'),
+      loadingOverlay: document.getElementById('loadingOverlay'),
+      loadingText: document.getElementById('loadingText'),
+      errText: document.getElementById('errText'),
+    };
+
+    els.dropzone.addEventListener('click', () => els.fileInput.click());
+    els.fileInput.addEventListener('change', (e) => { if (e.target.files.length) analyzeFile(e.target.files[0]); });
+    els.dropzone.addEventListener('dragover', (e) => { e.preventDefault(); els.dropzone.classList.add('dragover'); });
+    els.dropzone.addEventListener('dragleave', () => els.dropzone.classList.remove('dragover'));
+    els.dropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      els.dropzone.classList.remove('dragover');
+      if (e.dataTransfer.files.length) analyzeFile(e.dataTransfer.files[0]);
+    });
+
+    function showLoading(text) { els.loadingText.textContent = text; els.loadingOverlay.style.display = 'flex'; }
+    function hideLoading() { els.loadingOverlay.style.display = 'none'; }
+    function setProgress(pct, text) {
+      els.progress.style.display = 'block';
+      els.progressBar.style.width = pct + '%';
+      els.progressText.textContent = text || '';
+    }
+    function showError(msg) { els.errText.textContent = msg; }
+
+    // ===== File header parsing (offline, no dependencies) =====
+    function readStr(dv, offset, len) {
+      let s = '';
+      for (let i = 0; i < len; i++) s += String.fromCharCode(dv.getUint8(offset + i));
+      return s;
+    }
+
+    function parseExtendedFloat(dv, offset) {
+      // 80-bit IEEE 754 extended (big-endian)
+      const exponent = dv.getUint16(offset, false) & 0x7FFF;
+      const hiMant = dv.getUint32(offset + 2, false);
+      const loMant = dv.getUint32(offset + 6, false);
+      if (exponent === 0 && hiMant === 0 && loMant === 0) return 0;
+      const sign = (dv.getUint16(offset, false) & 0x8000) ? -1 : 1;
+      const mantissa = hiMant * 0x100000000 + loMant;
+      return sign * mantissa * Math.pow(2, exponent - 16383 - 63);
+    }
+
+    function parseWAV(buf) {
+      const dv = new DataView(buf);
+      let offset = 12;
+      while (offset + 8 <= buf.byteLength) {
+        const id = readStr(dv, offset, 4);
+        const size = dv.getUint32(offset + 4, true);
+        if (id === 'fmt ') {
+          const audioFormat = dv.getUint16(offset + 8, true);
+          const channels = dv.getUint16(offset + 10, true);
+          const sampleRate = dv.getUint32(offset + 12, true);
+          const bitsPerSample = dv.getUint16(offset + 22, true);
+          let codec = 'PCM';
+          if (audioFormat === 3) codec = 'PCM float';
+          else if (audioFormat === 1) codec = 'PCM';
+          else if (audioFormat === 0xFFFE) codec = 'PCM ext';
+          return { sampleRate, channels, bitsPerSample, codec };
+        }
+        offset += 8 + size + (size % 2);
+      }
+      return null;
+    }
+
+    function parseFLAC(buf) {
+      const dv = new DataView(buf);
+      if (readStr(dv, 0, 4) !== 'fLaC') return null;
+      // first metadata block (STREAMINFO) at offset 4
+      const blockType = dv.getUint8(4) & 0x7F;
+      if (blockType !== 0) return null;
+      // streaminfo data starts at offset 8; sample-rate field at streaminfo byte 10 = file offset 18
+      const b0 = dv.getUint8(18), b1 = dv.getUint8(19), b2 = dv.getUint8(20), b3 = dv.getUint8(21);
+      const high32 = ((b0 << 24) | (b1 << 16) | (b2 << 8) | b3) >>> 0;
+      const sampleRate = high32 >>> 12;
+      const channels = ((high32 >>> 9) & 0x7) + 1;
+      const bitsPerSample = ((high32 >>> 4) & 0x1F) + 1;
+      return { sampleRate, channels, bitsPerSample, codec: 'FLAC' };
+    }
+
+    function parseAIFF(buf) {
+      const dv = new DataView(buf);
+      let offset = 12;
+      while (offset + 8 <= buf.byteLength) {
+        const id = readStr(dv, offset, 4);
+        const size = dv.getUint32(offset + 4, false);
+        if (id === 'COMM') {
+          const channels = dv.getUint16(offset + 8, false);
+          const sampleSize = dv.getUint16(offset + 14, false);
+          const sampleRate = parseExtendedFloat(dv, offset + 16);
+          return { sampleRate, channels, bitsPerSample: sampleSize, codec: 'PCM' };
+        }
+        offset += 8 + size + (size % 2);
+      }
+      return null;
+    }
+
+    const MP3_SR = [[44100,48000,32000],[0,0,0],[22050,24000,16000],[11025,12000,8000]];
+    function parseMP3(buf) {
+      const dv = new DataView(buf);
+      let offset = 0;
+      if (buf.byteLength > 10 && readStr(dv, 0, 3) === 'ID3') {
+        const size = ((dv.getUint8(6) & 0x7f) << 21) | ((dv.getUint8(7) & 0x7f) << 14) | ((dv.getUint8(8) & 0x7f) << 7) | (dv.getUint8(9) & 0x7f);
+        offset = 10 + size;
+      }
+      for (let i = offset; i + 4 <= buf.byteLength; i++) {
+        if (dv.getUint8(i) === 0xFF && (dv.getUint8(i + 1) & 0xE0) === 0xE0) {
+          const verBits = (dv.getUint8(i + 1) >> 3) & 0x03;
+          const srIndex = (dv.getUint8(i + 2) >> 2) & 0x03;
+          const v = verBits === 3 ? 0 : verBits === 2 ? 2 : verBits === 0 ? 3 : 1;
+          const sr = MP3_SR[v][srIndex];
+          const chMode = (dv.getUint8(i + 3) >> 6) & 0x03;
+          return { sampleRate: sr, channels: chMode === 3 ? 1 : 2, codec: 'MP3' };
+        }
+      }
+      return null;
+    }
+
+    function parseOgg(buf) {
+      const bytes = new Uint8Array(buf);
+      // find "OpusHead" or "\x01vorbis"
+      for (let i = 0; i + 8 < bytes.length; i++) {
+        if (bytes[i] === 0x4F && bytes[i+1] === 0x70 && bytes[i+2] === 0x75 && bytes[i+3] === 0x73
+            && bytes[i+4] === 0x48 && bytes[i+5] === 0x65 && bytes[i+6] === 0x61 && bytes[i+7] === 0x64) {
+          // OpusHead: version(1), channels(1), preskip(2), sampleRate(4 LE), ...
+          const dv = new DataView(buf);
+          const channels = dv.getUint8(i + 9);
+          const sr = dv.getUint32(i + 12, true);
+          return { sampleRate: sr || 48000, channels, codec: 'OPUS' };
+        }
+      }
+      for (let i = 0; i + 7 < bytes.length; i++) {
+        if (bytes[i] === 0x01 && bytes[i+1] === 0x76 && bytes[i+2] === 0x6F && bytes[i+3] === 0x72
+            && bytes[i+4] === 0x62 && bytes[i+5] === 0x69 && bytes[i+6] === 0x73) {
+          // vorbis id header: version(4), channels(1), sampleRate(4 LE)
+          const dv = new DataView(buf);
+          const channels = dv.getUint8(i + 5);
+          const sr = dv.getUint32(i + 6, true);
+          return { sampleRate: sr, channels, codec: 'VORBIS' };
+        }
+      }
+      return null;
+    }
+
+    function parseMP4(buf) {
+      const bytes = new Uint8Array(buf);
+      const find = (str) => {
+        for (let i = 0; i + 4 <= bytes.length; i++) {
+          if (bytes[i] === str.charCodeAt(0) && bytes[i+1] === str.charCodeAt(1) && bytes[i+2] === str.charCodeAt(2) && bytes[i+3] === str.charCodeAt(3)) return i;
+        }
+        return -1;
+      };
+      // ftyp brand
+      let container = 'MP4/M4A';
+      const ftypIdx = find('ftyp');
+      let brand = '';
+      if (ftypIdx >= 0) brand = readStr(new DataView(buf), ftypIdx + 4, 4);
+      // ALAC: parse ALACSpecificConfig for bit depth, channels, sample rate
+      // 'alac' fourcc in stsd → +12 header → +5 bitDepth, +9 numChannels, +20 sampleRate(BE)
+      const alacIdx = find('alac');
+      if (alacIdx >= 0 && alacIdx + 36 <= bytes.length) {
+        const dv = new DataView(buf);
+        const bitsPerSample = dv.getUint8(alacIdx + 17);
+        const channels = dv.getUint8(alacIdx + 21);
+        const sampleRate = dv.getUint32(alacIdx + 32, false);
+        if (bitsPerSample >= 8 && bitsPerSample <= 32 && channels >= 1 && channels <= 8 && sampleRate >= 8000 && sampleRate <= 384000) {
+          return { codec: 'ALAC', isLossless: true, container, brand, sampleRate, channels, bitsPerSample };
+        }
+      }
+      // codec detection
+      if (find('mp4a') >= 0 || find('enca') >= 0) {
+        return { codec: 'AAC', isLossless: false, container, brand };
+      }
+      return { codec: brand || 'MP4', isLossless: false, container, brand };
+    }
+
+    // Determine format from filename + magic bytes
+    function detectFormat(file, buf) {
+      const ext = file.name.split('.').pop().toLowerCase();
+      const dv = new DataView(buf);
+      const head4 = buf.byteLength >= 4 ? readStr(dv, 0, 4) : '';
+      const head8 = buf.byteLength >= 8 ? readStr(dv, 0, 8) : '';
+      let parsed = null;
+      let container = ext.toUpperCase();
+      let codecGuess = ext.toUpperCase();
+
+      if (head4 === 'RIFF' && buf.byteLength >= 12 && readStr(dv, 8, 4) === 'WAVE') {
+        parsed = parseWAV(buf);
+        container = 'WAV'; codecGuess = 'PCM';
+      } else if (head4 === 'fLaC') {
+        parsed = parseFLAC(buf);
+        container = 'FLAC'; codecGuess = 'FLAC';
+      } else if (head4 === 'FORM' && buf.byteLength >= 12 && (readStr(dv, 8, 4) === 'AIFF' || readStr(dv, 8, 4) === 'AIFC')) {
+        parsed = parseAIFF(buf);
+        container = 'AIFF'; codecGuess = 'PCM';
+      } else if (head4 === 'OggS') {
+        parsed = parseOgg(buf);
+        container = 'OGG';
+        codecGuess = parsed ? parsed.codec : (ext === 'opus' ? 'OPUS' : 'VORBIS');
+      } else if ((buf.byteLength >= 3 && readStr(dv, 0, 3) === 'ID3') || (buf.byteLength >= 2 && dv.getUint8(0) === 0xFF && (dv.getUint8(1) & 0xE0) === 0xE0)) {
+        parsed = parseMP3(buf);
+        container = 'MP3'; codecGuess = 'MP3';
+      } else if (findSub(bytes(dv,buf),'ftyp') >= 0) {
+        const m = parseMP4(buf);
+        container = m.container; codecGuess = m.codec;
+        parsed = { codec: m.codec, isLosslessFromHeader: m.isLossless, sampleRate: m.sampleRate, channels: m.channels, bitsPerSample: m.bitsPerSample };
+      }
+
+      const fmt = {
+        container,
+        codec: (parsed && parsed.codec) ? parsed.codec : codecGuess,
+        sampleRate: parsed ? parsed.sampleRate : 0,
+        channels: parsed ? parsed.channels : 0,
+        bitDepth: parsed && parsed.bitsPerSample ? parsed.bitsPerSample : 0,
+        ext,
+        headLossless: parsed ? parsed.isLosslessFromHeader : null,
+      };
+      return fmt;
+    }
+    function bytes(dv, buf) { return new Uint8Array(buf); }
+    function findSub(arr, str) {
+      for (let i = 0; i + 4 <= arr.length; i++) {
+        if (arr[i] === str.charCodeAt(0) && arr[i+1] === str.charCodeAt(1) && arr[i+2] === str.charCodeAt(2) && arr[i+3] === str.charCodeAt(3)) return i;
+      }
+      return -1;
+    }
+
+    // ===== Analysis pipeline =====
+    let audioCtx = null;
+    function getAudioContext() {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      return audioCtx;
+    }
+
+    async function analyzeFile(file) {
+      showError('');
+      els.results.style.display = 'none';
+      showLoading('正在读取文件...');
+      setProgress(10, '读取文件中...');
+
+      const arrayBuffer = await file.arrayBuffer();
+
+      setProgress(25, '解析文件头...');
+      const fmt = detectFormat(file, arrayBuffer);
+
+      setProgress(35, '解码音频...');
+      let audioBuffer;
+      try {
+        const ctx = getAudioContext();
+        // decodeAudioData needs its own copy
+        audioBuffer = await ctx.decodeAudioData(arrayBuffer.slice(0));
+      } catch (e) {
+        hideLoading();
+        showError('该格式无法在当前浏览器解码：' + fmt.container + '/' + fmt.codec + '。请尝试 WAV/FLAC/MP3 等更通用的格式，或换用 Safari。');
+        return;
+      }
+
+      setProgress(50, '进行频谱分析...');
+
+      // Prefer header sample rate for lossless; otherwise decoded buffer's
+      const sampleRate = fmt.sampleRate || audioBuffer.sampleRate;
+      const channels = fmt.channels || audioBuffer.numberOfChannels;
+      const totalSamples = audioBuffer.length;
+      const duration = audioBuffer.duration;
+
+      const l = audioBuffer.getChannelData(0);
+      const r = audioBuffer.numberOfChannels > 1 ? audioBuffer.getChannelData(1) : l;
+
+      // limit analysis length (first 5 min) for performance
+      const maxSamples = Math.min(totalSamples, sampleRate * 300);
+      const audio = {
+        sampleRate, channels: 2, length: totalSamples,
+        l: l.subarray(0, maxSamples),
+        r: r.subarray(0, maxSamples),
+        analyzedLength: maxSamples,
+      };
+
+      // metadata
+      const meta = {
+        container: fmt.container,
+        codec: fmt.codec,
+        sampleRate,
+        bitDepth: fmt.bitDepth,
+        channels,
+        bitrate: duration ? (file.size * 8 / duration) / 1000 : 0,
+        duration,
+        ext: fmt.ext,
+      };
+
+      // lossy/lossless classification
+      const ext = fmt.ext;
+      const codecLower = fmt.codec.toLowerCase();
+      let isLossless = false, isLossy = false, codecType = '未知';
+      const losslessExt = ['flac','wav','aiff','aif','alac','ape'];
+      const lossyExt = ['mp3','aac','ogg','opus'];
+      if (codecLower.includes('flac')) { isLossless = true; codecType = 'FLAC 无损'; }
+      else if (codecLower.includes('pcm')) { isLossless = true; codecType = 'PCM 无损'; }
+      else if (codecLower.includes('alac')) { isLossless = true; codecType = 'ALAC 无损'; }
+      else if (codecLower.includes('mp3')) { isLossy = true; codecType = 'MP3 有损'; }
+      else if (codecLower.includes('aac')) { isLossy = true; codecType = 'AAC 有损'; }
+      else if (codecLower.includes('opus')) { isLossy = true; codecType = 'OPUS 有损'; }
+      else if (codecLower.includes('vorbis')) { isLossy = true; codecType = 'Vorbis 有损'; }
+      else if (losslessExt.includes(ext)) { isLossless = true; codecType = ext.toUpperCase() + ' 无损'; }
+      else if (lossyExt.includes(ext)) { isLossy = true; codecType = ext.toUpperCase() + ' 有损'; }
+
+      const report = computeReport(audio, meta, isLossless, isLossy, codecType);
+
+      setProgress(95, '渲染结果...');
+      renderReport(report, file, meta, isLossless, isLossy, codecType);
+
+      setProgress(100, '完成');
+      hideLoading();
+    }
+
+    function computeReport(audio, meta, isLossless, isLossy, codecType) {
+      const len = audio.analyzedLength;
+      const sr = audio.sampleRate;
+      const l = audio.l, r = audio.r;
+
+      let peak = 0, clipCount = 0;
+      let sumL = 0, sumR = 0, sumL2 = 0, sumR2 = 0, sumLR = 0;
+      for (let i = 0; i < len; i++) {
+        const lv = l[i], rv = r[i];
+        peak = Math.max(peak, Math.abs(lv), Math.abs(rv));
+        if (Math.abs(lv) > 0.9999 || Math.abs(rv) > 0.9999) clipCount++;
+        sumL += lv; sumR += rv;
+        sumL2 += lv * lv; sumR2 += rv * rv; sumLR += lv * rv;
+      }
+      const rms = Math.sqrt((sumL2 + sumR2) / (2 * len));
+      const crest = peak / Math.max(1e-12, rms);
+      const crestDb = 20 * Math.log10(crest);
+      const clipPercent = (clipCount / len) * 100;
+
+      const meanL = sumL / len, meanR = sumR / len;
+      const cov = sumLR / len - meanL * meanR;
+      const varL = sumL2 / len - meanL * meanL;
+      const varR = sumR2 / len - meanR * meanR;
+      const correlation = cov / Math.sqrt(Math.max(1e-12, varL * varR));
+
+      let midE = 0, sideE = 0;
+      for (let i = 0; i < len; i++) {
+        const m = (l[i] + r[i]) / 2, s = (l[i] - r[i]) / 2;
+        midE += m * m; sideE += s * s;
+      }
+      const msRatio = midE / Math.max(1e-12, sideE);
+      const msRatioDb = 10 * Math.log10(msRatio);
+
+      const blockSize = Math.floor(sr * 3);
+      const blockRms = [];
+      for (let i = 0; i < len; i += blockSize) {
+        let bsum = 0, n = Math.min(blockSize, len - i);
+        for (let j = 0; j < n; j++) {
+          const lv = l[i + j], rv = r[i + j];
+          bsum += (lv * lv + rv * rv) * 0.5;
+        }
+        const brms = Math.sqrt(bsum / n);
+        if (brms > 1e-6) blockRms.push(brms);
+      }
+      blockRms.sort((a, b) => b - a);
+      const topN = Math.max(1, Math.floor(blockRms.length * 0.2));
+      let topSum = 0;
+      const actualN = Math.min(topN, blockRms.length);
+      for (let i = 0; i < actualN; i++) topSum += blockRms[i];
+      const rmsTop20 = actualN > 0 ? topSum / actualN : rms;
+      const dr = 20 * Math.log10(peak / Math.max(1e-12, rmsTop20));
+
+      const mono = new Float32Array(len);
+      for (let i = 0; i < len; i++) mono[i] = (l[i] + r[i]) * 0.5;
+      const fftSize = 8192;
+      const win = hannWindow(fftSize);
+      const spectrum = averageSpectrum(mono, fftSize, win);
+      const spectrumL = averageSpectrum(l, fftSize, win);
+      const spectrumR = averageSpectrum(r, fftSize, win);
+
+      const nyquist = sr / 2;
+      const maxBin = spectrum.length;
+      const peakMag = Math.max.apply(null, spectrum);
+      const threshold = peakMag * 0.005;
+      let cutoffBin = 0;
+      for (let i = maxBin - 1; i >= 0; i--) {
+        if (spectrum[i] > threshold) { cutoffBin = i; break; }
+      }
+      const cutoffFreq = (cutoffBin / maxBin) * nyquist;
+
+      let totalEnergy = 0, highEnergy = 0;
+      for (let i = 0; i < maxBin; i++) {
+        const f = (i / maxBin) * nyquist;
+        totalEnergy += spectrum[i];
+        if (f > 20000) highEnergy += spectrum[i];
+      }
+      const highFreqRatio = totalEnergy > 0 ? highEnergy / totalEnergy : 0;
+
+      let upsampleVerdict = { status: 'pass', text: '未检测到过采样迹象' };
+      if (sr > 48000) {
+        if (cutoffFreq < 22000 && highFreqRatio < 0.001) {
+          upsampleVerdict = { status: 'fail', text: '疑似从低采样率源过采样' };
+        } else if (cutoffFreq < 24000 && highFreqRatio < 0.005) {
+          upsampleVerdict = { status: 'caution', text: '高频能量较弱，可能来自低分辨率源' };
+        }
+      }
+
+      let fakeLossless = { status: 'pass', text: '无损文件看起来真实' };
+      if (isLossless) {
+        if (cutoffFreq <= 16000) {
+          fakeLossless = { status: 'fail', text: '频率截止过低，疑似来自低码率有损源转码' };
+        } else if (cutoffFreq <= 20500) {
+          fakeLossless = { status: 'caution', text: '频率截止符合有损编码特征，可能从 MP3/AAC 转码' };
+        }
+      }
+
+      let qualityLabel = '', qualityDesc = '', overallBadge = '', overallStatus = '';
+      if (isLossless) {
+        if (meta.sampleRate >= 88200 && meta.bitDepth >= 24 && fakeLossless.status !== 'fail') {
+          qualityLabel = '高解析无损'; qualityDesc = 'Hi-Res 无损音频，采样率和位深度均达到高解析标准。'; overallBadge = '通过'; overallStatus = 'pass';
+        } else {
+          qualityLabel = 'CD 级普通无损'; qualityDesc = '标准无损音频，与 CD 质量相当。'; overallBadge = '通过'; overallStatus = 'pass';
+        }
+      } else {
+        const br = meta.bitrate;
+        if (br <= 80) { qualityLabel = '低码率有损（语音级）'; qualityDesc = '码率较低，适合语音，音乐细节损失明显。'; overallBadge = '失败'; overallStatus = 'fail'; }
+        else if (br <= 192) { qualityLabel = '标准有损（流媒体标准音质）'; qualityDesc = '常见流媒体音质，适合日常收听，高频有裁切。'; overallBadge = '提示'; overallStatus = 'caution'; }
+        else { qualityLabel = '高品质有损（流媒体高清/超清音质）'; qualityDesc = '较高码率有损编码，接近无损听感。'; overallBadge = '通过'; overallStatus = 'pass'; }
+      }
+      if (fakeLossless.status === 'fail' || upsampleVerdict.status === 'fail') { overallBadge = '失败'; overallStatus = 'fail'; }
+      else if (fakeLossless.status === 'caution' || upsampleVerdict.status === 'caution') {
+        if (overallStatus === 'pass') { overallBadge = '提示'; overallStatus = 'caution'; }
+      }
+
+      const checks = [];
+      checks.push({
+        title: isLossless ? '无损格式' : '有损格式',
+        desc: codecType + (isLossless ? '：未使用有损压缩。' : `：约 ${Math.round(meta.bitrate)} kbps。`),
+        status: isLossless ? 'pass' : (meta.bitrate >= 256 ? 'info' : 'caution')
+      });
+      const bitDepthText = isLossless ? (meta.bitDepth + '-bit') : '有损编码';
+      checks.push({
+        title: `Sample Rate ${toKHz(meta.sampleRate)} (${bitDepthText})`,
+        desc: meta.sampleRate >= 88200 ? '高解析度采样率' : (meta.sampleRate >= 44100 ? 'CD 级标准采样率' : '低于 CD 标准'),
+        status: meta.sampleRate >= 44100 ? 'pass' : 'warn'
+      });
+      checks.push({
+        title: `频率截止 ${(cutoffFreq / 1000).toFixed(1)} kHz`,
+        desc: cutoffFreq >= 20000 ? '全频带保留' : `高频在 ${(cutoffFreq / 1000).toFixed(1)} kHz 处明显衰减`,
+        status: cutoffFreq >= 19000 ? 'pass' : (cutoffFreq >= 15000 ? 'caution' : 'warn')
+      });
+      if (isLossless) {
+        checks.push({ title: fakeLossless.status === 'fail' ? '疑似假无损' : '无损真实性', desc: fakeLossless.text, status: fakeLossless.status });
+      }
+      if (sr > 48000) {
+        checks.push({ title: upsampleVerdict.status === 'fail' ? '疑似过采样假 Hi-Res' : '过采样检测', desc: upsampleVerdict.text, status: upsampleVerdict.status });
+      }
+      checks.push({
+        title: `动态范围 DR ${dr.toFixed(1)}`,
+        desc: dr > 12 ? '动态范围良好' : (dr > 8 ? '动态范围一般，可能经过适度压缩' : '动态范围较窄，过度压缩'),
+        status: dr > 10 ? 'pass' : (dr > 7 ? 'caution' : 'warn')
+      });
+      checks.push({
+        title: clipCount > 0 ? `检测到 ${clipCount} 次削波` : '未检测到削波',
+        desc: clipPercent > 0.01 ? '存在明显削波，音质可能受损' : '波形未触及 0 dBFS 硬限',
+        status: clipPercent > 0.01 ? 'warn' : 'pass'
+      });
+      checks.push({
+        title: correlation < 0 ? '立体声相位问题' : `立体声相关性 ${correlation.toFixed(3)}`,
+        desc: correlation < 0 ? '左右声道存在反相，单声道兼容性差' : (correlation > 0.95 ? '左右声道高度相关，接近单声道' : '立体声场正常'),
+        status: correlation < 0 ? 'warn' : 'pass'
+      });
+
+      const pass = checks.filter(c => c.status === 'pass').length;
+      const warn = checks.filter(c => c.status === 'warn').length;
+      const score = Math.max(0, Math.round((pass / checks.length) * 100 - warn * 15));
+
+      return {
+        meta, audio, codecType, isLossless, isLossy,
+        qualityLabel, qualityDesc, overallBadge, overallStatus, score,
+        peak, rms, crestDb, dr, loudness: rms, clipCount, clipPercent,
+        correlation, msRatioDb, cutoffFreq, nyquist, highFreqRatio,
+        upsampleVerdict, fakeLossless, checks,
+        spectrum, spectrumL, spectrumR
+      };
+    }
+
+    // ===== DSP helpers =====
+    function hannWindow(n) {
+      const w = new Float32Array(n);
+      for (let i = 0; i < n; i++) w[i] = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (n - 1));
+      return w;
+    }
+
+    function averageSpectrum(signal, fftSize, window) {
+      const hop = Math.floor(fftSize / 2);
+      const bins = fftSize / 2;
+      const sum = new Float64Array(bins);
+      let count = 0;
+      for (let start = 0; start + fftSize <= signal.length; start += hop) {
+        const re = new Float64Array(fftSize);
+        const im = new Float64Array(fftSize);
+        for (let i = 0; i < fftSize; i++) re[i] = signal[start + i] * window[i];
+        fft(re, im);
+        for (let k = 0; k < bins; k++) sum[k] += Math.sqrt(re[k] * re[k] + im[k] * im[k]);
+        count++;
+        if (count > 400) break;
+      }
+      const out = new Float32Array(bins);
+      for (let k = 0; k < bins; k++) out[k] = sum[k] / count;
+      return out;
+    }
+
+    function fft(re, im) {
+      const n = re.length;
+      if (n <= 1) return;
+      let j = 0;
+      for (let i = 0; i < n; i++) {
+        if (i < j) { [re[i], re[j]] = [re[j], re[i]]; [im[i], im[j]] = [im[j], im[i]]; }
+        let m = n >> 1;
+        while (m >= 1 && j >= m) { j -= m; m >>= 1; }
+        j += m;
+      }
+      const logN = Math.log2(n);
+      for (let s = 1; s <= logN; s++) {
+        const m = 1 << s;
+        const wmReal = Math.cos(-2 * Math.PI / m);
+        const wmImag = Math.sin(-2 * Math.PI / m);
+        for (let k = 0; k < n; k += m) {
+          let wReal = 1, wImag = 0;
+          for (let u = 0; u < m / 2; u++) {
+            const tReal = wReal * re[k + u + m / 2] - wImag * im[k + u + m / 2];
+            const tImag = wReal * im[k + u + m / 2] + wImag * re[k + u + m / 2];
+            re[k + u + m / 2] = re[k + u] - tReal;
+            im[k + u + m / 2] = im[k + u] - tImag;
+            re[k + u] += tReal; im[k + u] += tImag;
+            const nr = wReal * wmReal - wImag * wmImag;
+            const ni = wReal * wmImag + wImag * wmReal;
+            wReal = nr; wImag = ni;
+          }
+        }
+      }
+    }
+
+    // ===== Rendering =====
+    function formatTime(sec) {
+      if (!isFinite(sec)) return '0:00';
+      const m = Math.floor(sec / 60);
+      const s = Math.floor(sec % 60);
+      const ms = Math.floor((sec % 1) * 100);
+      return `${m}:${s.toString().padStart(2, '0')}.${ms.toString().padStart(2, '0')}`;
+    }
+    function formatBytes(b) {
+      if (b < 1024) return b + ' B';
+      if (b < 1048576) return (b / 1024).toFixed(2) + ' KB';
+      return (b / 1048576).toFixed(2) + ' MB';
+    }
+    function toKHz(sr) { return (sr / 1000).toFixed(1) + ' kHz'; }
+    function dbFS(v) { return (20 * Math.log10(Math.max(1e-12, Math.abs(v)))).toFixed(2) + ' dBFS'; }
+
+    function renderReport(r, file, meta, isLossless, isLossy, codecType) {
+      els.results.style.display = 'block';
+      document.getElementById('ratingValue').textContent = r.qualityLabel;
+      document.getElementById('ratingDesc').textContent = r.qualityDesc;
+      const badge = document.getElementById('ratingBadge');
+      badge.textContent = r.overallBadge;
+      badge.className = 'badge badge-' + (r.overallStatus === 'pass' ? 'pass' : r.overallStatus === 'caution' ? 'caution' : 'warn');
+
+      document.getElementById('summaryFormat').textContent = meta.container;
+      document.getElementById('summaryCodecType').textContent = codecType;
+      document.getElementById('summaryScore').textContent = r.score + '/100';
+
+      document.getElementById('metaName').textContent = file.name;
+      document.getElementById('metaSize').textContent = formatBytes(file.size);
+      document.getElementById('metaDuration').textContent = formatTime(meta.duration);
+      document.getElementById('metaHash').textContent = '计算中...';
+      computeSHA1(file).then(h => document.getElementById('metaHash').textContent = h);
+
+      document.getElementById('fmtContainer').textContent = meta.container;
+      document.getElementById('fmtCodec').textContent = meta.codec.toUpperCase();
+      document.getElementById('fmtSampleRate').textContent = toKHz(meta.sampleRate);
+      document.getElementById('fmtBitDepth').textContent = isLossless ? (meta.bitDepth ? meta.bitDepth + '-bit' : 'N/A') : 'N/A（有损）';
+      document.getElementById('fmtBitrate').textContent = Math.round(meta.bitrate) + ' kbps';
+      document.getElementById('fmtChannels').textContent = meta.channels === 1 ? 'Mono' : meta.channels === 2 ? 'Stereo' : meta.channels + ' ch';
+      document.getElementById('fmtSamples').textContent = r.audio.length.toLocaleString();
+
+      document.getElementById('cutoffFreq').textContent = (r.cutoffFreq / 1000).toFixed(1) + ' kHz';
+      document.getElementById('nyquistFreq').textContent = toKHz(r.nyquist);
+      document.getElementById('highFreqEnergy').textContent = (r.highFreqRatio * 100).toFixed(2) + '%';
+      const upEl = document.getElementById('upsampleResult');
+      upEl.textContent = r.upsampleVerdict.text;
+      upEl.className = 'v ' + (r.upsampleVerdict.status === 'pass' ? 'good' : r.upsampleVerdict.status === 'caution' ? 'warn' : 'fail');
+      document.getElementById('cutoffBar').style.width = Math.min(100, (r.cutoffFreq / r.nyquist) * 100) + '%';
+
+      document.getElementById('peakLevel').textContent = dbFS(r.peak);
+      document.getElementById('rmsLevel').textContent = dbFS(r.rms);
+      document.getElementById('crestFactor').textContent = r.crestDb.toFixed(2) + ' dB';
+      document.getElementById('drValue').textContent = 'DR ' + r.dr.toFixed(1);
+      document.getElementById('loudness').textContent = dbFS(r.loudness);
+      const dynBar = document.getElementById('dynamicBar');
+      dynBar.style.width = Math.min(100, (r.dr / 18) * 100) + '%';
+      dynBar.style.background = r.dr > 10 ? 'var(--accent)' : r.dr > 7 ? 'var(--warn)' : 'var(--fail)';
+
+      document.getElementById('correlation').textContent = r.correlation.toFixed(3);
+      document.getElementById('msRatio').textContent = r.msRatioDb.toFixed(2) + ' dB';
+      document.getElementById('clipCount').textContent = r.clipCount.toLocaleString();
+      document.getElementById('clipPercent').textContent = r.clipPercent.toFixed(4) + '%';
+      const phaseEl = document.getElementById('phaseIssue');
+      phaseEl.textContent = r.correlation < 0 ? '检测到反相' : '无显著相位问题';
+      phaseEl.className = 'v ' + (r.correlation < 0 ? 'fail' : 'good');
+
+      const ql = document.getElementById('qualityList');
+      ql.innerHTML = '';
+      const iconMap = { pass: '\u2713', caution: '!', warn: '\u2715', info: 'i' };
+      r.checks.forEach(c => {
+        const div = document.createElement('div'); div.className = 'q-item';
+        div.innerHTML = `<div class="q-icon ${c.status}">${iconMap[c.status] || 'i'}</div><div><div class="q-title">${c.title}</div><div class="q-desc">${c.desc}</div></div>`;
+        ql.appendChild(div);
+      });
+
+      drawSpectrum(r);
+      drawSpectrogram(r);
+    }
+
+    function drawSpectrum(r) {
+      const c = document.getElementById('spectrumCanvas');
+      const ctx = c.getContext('2d');
+      const dpr = window.devicePixelRatio || 1;
+      const rect = c.getBoundingClientRect();
+      c.width = rect.width * dpr; c.height = rect.height * dpr;
+      ctx.scale(dpr, dpr);
+      const w = rect.width, h = rect.height;
+      ctx.clearRect(0, 0, w, h);
+      ctx.fillStyle = '#0d0e12'; ctx.fillRect(0, 0, w, h);
+
+      const nyquist = r.nyquist;
+      const bins = r.spectrum.length;
+      const minFreq = 20, maxFreq = Math.min(nyquist, 24000);
+      const minDb = -120, maxDb = 0;
+
+      function xOf(f) {
+        const a = Math.log10(minFreq), b = Math.log10(maxFreq);
+        return ((Math.log10(Math.max(minFreq, f)) - a) / (b - a)) * w;
+      }
+      function yOf(mag) {
+        const db = 20 * Math.log10(Math.max(1e-12, mag));
+        return h - ((db - minDb) / (maxDb - minDb)) * h;
+      }
+      ctx.strokeStyle = '#2a2d36'; ctx.lineWidth = 1;
+      ctx.fillStyle = '#6b7280'; ctx.font = '10px sans-serif';
+      [50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000].forEach(f => {
+        const x = xOf(f);
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+        ctx.fillText(f >= 1000 ? (f / 1000) + 'k' : f, x + 3, h - 4);
+      });
+
+      function drawChannel(spectrum, color) {
+        ctx.beginPath();
+        ctx.strokeStyle = color; ctx.lineWidth = 2;
+        let started = false;
+        for (let k = 0; k < bins; k++) {
+          const f = (k / bins) * nyquist;
+          if (f < minFreq) continue;
+          const x = xOf(f);
+          const y = yOf(spectrum[k]);
+          if (!started) { ctx.moveTo(x, y); started = true; }
+          else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      }
+      drawChannel(r.spectrumL, '#22c55e');
+      drawChannel(r.spectrumR, '#3b82f6');
+    }
+
+    function drawSpectrogram(r) {
+      const c = document.getElementById('spectrogramCanvas');
+      const ctx = c.getContext('2d');
+      const dpr = window.devicePixelRatio || 1;
+      const rect = c.getBoundingClientRect();
+      const w = Math.floor(rect.width * dpr);
+      const h = Math.floor(rect.height * dpr);
+      c.width = w; c.height = h;
+      ctx.fillStyle = '#0d0e12'; ctx.fillRect(0, 0, w, h);
+
+      const sr = r.audio.sampleRate;
+      const len = r.audio.analyzedLength;
+      const mono = new Float32Array(len);
+      for (let i = 0; i < len; i++) mono[i] = (r.audio.l[i] + r.audio.r[i]) * 0.5;
+
+      const fftSize = 2048;
+      const hop = 512;
+      const bins = fftSize / 2;
+      const win = hannWindow(fftSize);
+      const cols = Math.floor(len / hop);
+      const imgW = Math.min(cols, w);
+      const imgH = h;
+      const imgData = ctx.createImageData(imgW, imgH);
+      const step = Math.max(1, Math.floor(cols / imgW));
+
+      const nyquist = sr / 2;
+      const minF = 20, maxF = Math.min(nyquist, 20000);
+      const binToY = new Int16Array(bins);
+      for (let k = 0; k < bins; k++) {
+        const f = (k / bins) * nyquist;
+        if (f < minF || f > maxF) { binToY[k] = -1; continue; }
+        const logP = (Math.log10(f) - Math.log10(minF)) / (Math.log10(maxF) - Math.log10(minF));
+        binToY[k] = Math.max(0, Math.min(imgH - 1, Math.floor((1 - logP) * imgH)));
+      }
+
+      let colIdx = 0;
+      for (let start = 0; start + fftSize < len && colIdx < imgW; start += hop * step, colIdx++) {
+        const re = new Float64Array(fftSize);
+        const im = new Float64Array(fftSize);
+        for (let i = 0; i < fftSize; i++) re[i] = mono[start + i] * win[i];
+        fft(re, im);
+        const pixelMag = new Float64Array(imgH).fill(-Infinity);
+        const pixelCnt = new Int32Array(imgH);
+        for (let k = 0; k < bins; k++) {
+          const y = binToY[k];
+          if (y < 0) continue;
+          const mag = Math.sqrt(re[k] * re[k] + im[k] * im[k]);
+          if (mag > pixelMag[y]) pixelMag[y] = mag;
+          pixelCnt[y]++;
+        }
+        for (let y = 0; y < imgH; y++) {
+          if (pixelCnt[y] === 0) continue;
+          const db = 20 * Math.log10(Math.max(1e-12, pixelMag[y]));
+          const norm = Math.max(0, Math.min(1, (db + 90) / 80));
+          const col = spectrogramColor(norm);
+          const idx = (y * imgW + colIdx) * 4;
+          imgData.data[idx] = col[0];
+          imgData.data[idx + 1] = col[1];
+          imgData.data[idx + 2] = col[2];
+          imgData.data[idx + 3] = 255;
+        }
+      }
+      ctx.putImageData(imgData, 0, 0);
+
+      ctx.fillStyle = '#6b7280'; ctx.font = Math.floor(10 * dpr) + 'px sans-serif';
+      [50, 100, 200, 500, 1000, 2000, 5000, 10000].forEach(f => {
+        const logP = (Math.log10(f) - Math.log10(minF)) / (Math.log10(maxF) - Math.log10(minF));
+        const y = (1 - logP) * h;
+        ctx.fillText(f >= 1000 ? (f / 1000) + 'k' : f, 4 * dpr, y - 2 * dpr);
+      });
+    }
+
+    function spectrogramColor(t) {
+      if (t < 0.25) return [0, Math.floor(t * 4 * 80), Math.floor(t * 4 * 180)];
+      if (t < 0.5) return [0, Math.floor(80 + (t - 0.25) * 4 * 120), Math.floor(180 - (t - 0.25) * 4 * 100)];
+      if (t < 0.75) return [Math.floor((t - 0.5) * 4 * 200), 200, 80];
+      return [255, Math.floor(200 + (t - 0.75) * 4 * 55), Math.floor(80 + (t - 0.75) * 4 * 175)];
+    }
+
+    async function computeSHA1(file) {
+      try {
+        const buf = await file.arrayBuffer();
+        const hashBuf = await crypto.subtle.digest('SHA-1', buf);
+        const arr = Array.from(new Uint8Array(hashBuf));
+        return arr.map(b => b.toString(16).padStart(2, '0')).join('').substring(0, 16);
+      } catch (e) { return 'N/A'; }
+    }
+  </script>
+</body>
+</html>
